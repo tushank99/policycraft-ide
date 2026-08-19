@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+__pycache__/
+.pytest_cache/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# Build output
+dist/
+build/
+*.zip
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+terraform.tfvars
+
+# Environment
+.env
+*.env
+*.tfvars
+*.pem
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Lambda packages
+backend/*/package/
