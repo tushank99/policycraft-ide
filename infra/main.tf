@@ -17,8 +17,27 @@ provider "aws" {
 
 # ─── Current account identity ─────────────────────────────────────────────────
 data "aws_caller_identity" "current" {}
-data "aws_iam_role" "lab_role" {
-  name = "LabRole"
+
+# ─── Phase 1: Replaced LabRole with Free Tier Custom Role ───────────────────
+resource "aws_iam_role" "lambda_exec" {
+  name = "idp-lambda-execution-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = { 
+        # Allow both Lambda and EventBridge Pipes to use this role
+        Service = ["lambda.amazonaws.com", "pipes.amazonaws.com"] 
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_admin" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" 
+  # Note: AdminAccess is used here strictly for a temporary local demo
 }
 
 locals {
@@ -53,10 +72,10 @@ resource "aws_dynamodb_table" "idp" {
   }
 
   global_secondary_index {
-    name            = "GSI1"
-    hash_key        = "GSI1PK"
-    range_key       = "GSI1SK"
-    projection_type = "ALL"
+    name               = "GSI1"
+    hash_key           = "GSI1PK"
+    range_key          = "GSI1SK"
+    projection_type    = "ALL"
   }
 
   # Phase 4 Additions: Enable Streams for EventBridge
@@ -80,8 +99,8 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
 
 # Phase 4 Addition: WORM S3 Audit Vault
 resource "aws_s3_bucket" "audit_vault" {
-  bucket              = "idp-audit-vault-${local.account_id}"
-  force_destroy       = true
+  bucket        = "idp-audit-vault-${local.account_id}"
+  force_destroy = true
   object_lock_enabled = true
 }
 
@@ -105,10 +124,9 @@ resource "aws_sqs_queue" "generation" {
 # ─── EventBridge Pipe (Phase 4) ───────────────────────────────────────────────
 resource "aws_pipes_pipe" "audit_stream_pipe" {
   name     = "idp-audit-stream-pipe"
-  role_arn = data.aws_iam_role.lab_role.arn
-  
+  role_arn = aws_iam_role.lambda_exec.arn # Updated to use custom role
   source   = aws_dynamodb_table.idp.stream_arn
-  target   = aws_lambda_function.audit_service.arn 
+  target   = aws_lambda_function.audit_service.arn
 
   source_parameters {
     dynamodb_stream_parameters {
@@ -116,7 +134,6 @@ resource "aws_pipes_pipe" "audit_stream_pipe" {
       batch_size             = 10
       maximum_retry_attempts = 3
     }
-    
     filter_criteria {
       filter {
         pattern = jsonencode({
