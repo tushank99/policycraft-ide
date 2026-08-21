@@ -1,11 +1,7 @@
 name: Infrastructure
 
-# Run manually or automatically when infra/ files change on main.
-# NOTE: AWS Academy credentials expire per session — update the three 
-# AWS_* secrets in GitHub before triggering this workflow.
 on:
   workflow_dispatch:
-  # Temporarily disabled until AWS is configured
   # push:
   #   branches: [main]
   #   paths:
@@ -15,7 +11,6 @@ jobs:
   terraform:
     name: Terraform Apply
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
 

@@ -19,13 +19,13 @@ from typing import Any
 
 
 try:
-    from .ast_engine import ASTComplianceEngine
-    from .security_scanner import SecurityScanner
-    from .manifest_rules import ManifestComplianceEngine
-except ImportError:
-    from backend.validation_service.ast_engine import ASTComplianceEngine
-    from backend.validation_service.security_scanner import SecurityScanner
-    from backend.validation_service.manifest_rules import ManifestComplianceEngine
+    from ast_engine import ASTComplianceEngine
+    from security_scanner import SecurityScanner
+    from manifest_rules import ManifestComplianceEngine
+except ModuleNotFoundError:
+    from validation_service.ast_engine import ASTComplianceEngine
+    from validation_service.security_scanner import SecurityScanner
+    from validation_service.manifest_rules import ManifestComplianceEngine
 
 
 def validate_generated_output(
@@ -55,9 +55,11 @@ def validate_generated_output(
         # 1. Static Security Scan (Runs on ALL text files to catch secrets & CORS)
         results.extend(SecurityScanner.scan_file(content, filename))
         
-        # 2. AST Compliance Engine (Runs ONLY on Python files to prevent SyntaxErrors)
-        if language == "python" and filename.endswith(".py"):
-            results.extend(ASTComplianceEngine.validate_python_code(content, filename))
+    # 2. AST Compliance Engine (Runs ONLY on Python files to prevent SyntaxErrors)
+    if language == "python":
+        python_files = {k: v for k, v in files.items() if k.endswith(".py")}
+        if python_files:
+            results.extend(ASTComplianceEngine.validate_python_project(python_files))
 
     # 3. Manifest & Dependency Compliance
     results.extend(ManifestComplianceEngine.validate_manifests(files, spec))

@@ -55,14 +55,7 @@ def call_groq(system_prompt: str, user_prompt: str) -> str:
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {GROQ_API_KEY}",
-        "User-Agent": "groq-python/0.9.0",
         "Accept": "application/json",
-        "X-Stainless-Lang": "python",
-        "X-Stainless-Package-Version": "0.9.0",
-        "X-Stainless-OS": "Linux",
-        "X-Stainless-Arch": "x64",
-        "X-Stainless-Runtime": "CPython",
-        "X-Stainless-Runtime-Version": "3.12.0",
     }
 
     last_error: Optional[Exception] = None

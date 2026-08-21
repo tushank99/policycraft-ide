@@ -1,12 +1,30 @@
 import os
 import json
+import re
 import time
 import urllib.request
 import boto3
-try:
-    from finops import FinOps
-except ModuleNotFoundError:
-    from backend.generation_orchestrator.finops import FinOps
+from finops import FinOps
+
+
+def _strip_planning_prose(content: str) -> str:
+    """Remove thinking blocks and planning prose from LLM output.
+
+    Handles:
+    - Qwen <think>...</think> XML blocks
+    - Llama/generic models that dump planning prose before the first ### FILE: marker
+    """
+    # 1. Strip Qwen-style <think>...</think> tags
+    content = re.sub(r"<think>.*?</think>\s*", "", content, flags=re.DOTALL)
+
+    # 2. If there's a ### FILE: marker, discard everything before the FIRST one.
+    #    This removes any inline planning prose that Llama/Bedrock outputs before the code.
+    first_marker = content.find("### FILE:")
+    if first_marker != -1:
+        content = content[first_marker:]
+
+    return content.strip()
+
 
 class LLMClient:
     def __init__(self):
@@ -15,32 +33,36 @@ class LLMClient:
         self.bedrock_model = os.environ.get("BEDROCK_FALLBACK_MODEL", "meta.llama3-70b-instruct-v1:0")
 
     def _call_groq(self, system_prompt: str, user_prompt: str) -> dict:
-        """Calls Groq API with an 8-second timeout per attempt."""
+        """Calls Groq API with generous token budget for code generation."""
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.groq_api_key}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "PolicyCraft/1.0"
         }
         payload = {
-            "model": "llama-3.3-70b-versatile",
+            "model": "qwen/qwen3.6-27b",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": 0.2
+            "temperature": 0.15,
+            "max_tokens": 8000
         }
         
         req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers)
-        with urllib.request.urlopen(req, timeout=8) as response:
+        with urllib.request.urlopen(req, timeout=120) as response:
             res_data = json.loads(response.read().decode('utf-8'))
             
         content = res_data["choices"][0]["message"]["content"]
         raw_usage = res_data.get("usage", {})
         
+        content = _strip_planning_prose(content)
+        
         return {
             "content": content,
             "provider": "groq",
-            "model_id": "llama-3.3-70b-versatile",
+            "model_id": "qwen/qwen3.6-27b",
             "usage": FinOps.normalize_usage(raw_usage, "groq")
         }
 
@@ -66,6 +88,7 @@ class LLMClient:
         
         res_body = json.loads(response['body'].read().decode('utf-8'))
         content = res_body.get("generation", "")
+        content = _strip_planning_prose(content)
         
         raw_usage = {
             "input_tokens": res_body.get("prompt_token_count", len(formatted_prompt) // 4),

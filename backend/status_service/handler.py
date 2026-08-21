@@ -54,7 +54,17 @@ def handler(event, context):
 
     try:
         # Route matching
-        request_id = path_params.get("id")
+        request_id = path_params.get("id") or path_params.get("requestId")
+
+        # Fallback: Extract request ID directly from URL path if pathParameters is empty
+        if not request_id and "/requests/" in path:
+            parts = [p for p in path.split("/") if p]
+            try:
+                req_idx = parts.index("requests")
+                if req_idx + 1 < len(parts) and parts[req_idx + 1] not in ("status", "plan", "generate"):
+                    request_id = parts[req_idx + 1]
+            except (ValueError, IndexError):
+                pass
 
         # POST /requests — create new request
         if http_method == "POST" and not request_id:
@@ -89,7 +99,6 @@ def handler(event, context):
     except Exception as e:
         logger.exception("Unhandled error in status service")
         return server_error(str(e))
-
 
 def _create_request(event):
     """Create a new generation request."""

@@ -12,6 +12,7 @@ opentelemetry-sdk==1.24.0
 opentelemetry-instrumentation-fastapi==0.45b0
 opentelemetry-exporter-otlp==1.24.0
 python-json-logger==2.0.7
+python-jose[cryptography]==3.3.0
 # ----------------------------------------------------
 """,
         "telemetry_rules": (

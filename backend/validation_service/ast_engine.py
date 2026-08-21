@@ -36,30 +36,42 @@ class ComplianceVisitor(ast.NodeVisitor):
 
 class ASTComplianceEngine:
     @staticmethod
-    def validate_python_code(file_content: str, filename: str) -> List[Dict[str, Any]]:
-        """Parses Python code into an AST and evaluates structural compliance."""
+    def validate_python_project(files: Dict[str, str]) -> List[Dict[str, Any]]:
+        """Parses all Python code into an AST and evaluates structural compliance holistically."""
         results = []
+        all_found_routes = []
+        all_envelope_violations = []
 
-        # 1. Syntax & Parseability Check
-        try:
-            tree = ast.parse(file_content)
-        except SyntaxError as e:
-            return [{
-                "rule": "Python Syntax Compilation",
-                "status": "FAIL",
-                "severity": "mandatory",
-                "message": f"Syntax Error in {filename} at line {e.lineno}: {e.msg}",
-                "engine": "ast_python"
-            }]
+        parsed_any = False
+        for filename, file_content in files.items():
+            try:
+                tree = ast.parse(file_content)
+            except SyntaxError as e:
+                results.append({
+                    "rule": "Python Syntax Compilation",
+                    "status": "FAIL",
+                    "severity": "mandatory",
+                    "message": f"Syntax Error in {filename} at line {e.lineno}: {e.msg}",
+                    "engine": "ast_python"
+                })
+                continue
 
-        # 2. Traverse AST Node Tree
-        visitor = ComplianceVisitor()
-        visitor.visit(tree)
+            parsed_any = True
+            visitor = ComplianceVisitor()
+            visitor.visit(tree)
+            
+            all_found_routes.extend(visitor.found_routes)
+            if visitor.envelope_violations:
+                all_envelope_violations.append((filename, visitor.envelope_violations))
+
+        # Skip route checks when nothing compiled — syntax failures already cover it.
+        if not parsed_any:
+            return results
 
         # 3. Health Probe Route Validation
         required_routes = ["/healthz", "/readyz"]
         for route in required_routes:
-            if route in visitor.found_routes:
+            if route in all_found_routes:
                 results.append({
                     "rule": f"AST Route Verification: {route}",
                     "status": "PASS",
@@ -78,12 +90,13 @@ class ASTComplianceEngine:
                 })
 
         # 4. Response Envelope Validation
-        if visitor.envelope_violations:
+        if all_envelope_violations:
+            violation_msgs = [f"{fname} (lines: {', '.join(map(str, lines))})" for fname, lines in all_envelope_violations]
             results.append({
                 "rule": "AST Response Envelope Format",
                 "status": "WARNING",
                 "severity": "warning",
-                "message": f"Found direct returns without standard envelope at lines: {', '.join(map(str, visitor.envelope_violations))}",
+                "message": f"Found direct returns without standard envelope in: {'; '.join(violation_msgs)}",
                 "engine": "ast_python",
                 "remediation": "Wrap dictionary returns in {'data': ..., 'status': 'success', 'error': null}."
             })

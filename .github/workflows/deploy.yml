@@ -1,9 +1,8 @@
 name: Deploy
 
-# Triggers only on direct push to main (i.e. after a PR is merged) or manual dispatch
+# Triggers only on manual dispatch (or uncomment push trigger after AWS setup)
 on:
   workflow_dispatch:
-  # Temporarily disabled until AWS is configured
   # push:
   #   branches: [main]
 
@@ -54,7 +53,6 @@ jobs:
     name: Deploy Frontend
     needs: [backend-tests, frontend-tests]
     runs-on: ubuntu-latest
-    environment: production
     steps:
       - uses: actions/checkout@v4
 

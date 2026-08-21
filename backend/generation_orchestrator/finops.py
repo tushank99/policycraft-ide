@@ -4,6 +4,7 @@ class FinOps:
     # Pricing per 1M tokens in USD(It is standard because all major LLM and cloud providers publish and bill their base API rates in USD.)
     PRICING = {
         "llama-3.3-70b-versatile": {"prompt": 0.59, "completion": 0.79},
+        "qwen/qwen3.6-27b": {"prompt": 0.50, "completion": 0.50},
         "meta.llama3-70b-instruct-v1:0": {"prompt": 2.65, "completion": 3.50}, # Bedrock Llama 3
         "anthropic.claude-3-haiku": {"prompt": 0.25, "completion": 1.25}       # Bedrock Haiku
     }

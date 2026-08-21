@@ -31,20 +31,12 @@ from shared.db import (
     get_request,
 )
 from shared.s3_helper import upload_zip
-from prompt_builder import build_system_prompt, build_user_prompt
+from prompt_builder import build_system_prompt, build_user_prompt, build_repair_prompt
 from artifact_assembler import parse_llm_output, create_zip, get_file_list
 
-try:
-    from guardrails import Guardrails, TokenBudgetExceededException
-    from llm_client import LLMClient
-except ModuleNotFoundError:
-    from backend.generation_orchestrator.guardrails import Guardrails, TokenBudgetExceededException
-    from backend.generation_orchestrator.llm_client import LLMClient
-
-try:
-    from backend.shared.lineage import calculate_sha256
-except ModuleNotFoundError:
-    from shared.lineage import calculate_sha256
+from guardrails import Guardrails, TokenBudgetExceededException
+from llm_client import LLMClient
+from shared.lineage import calculate_sha256
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'policy_service'))
 from parser import parse_policy_to_spec
@@ -72,7 +64,7 @@ def _process_record(record: dict):
     """Process a single SQS generation request."""
     body = json.loads(record["body"])
     request_id = body["requestId"]
-    service_request = body["serviceRequest"]
+    service_request = body.get("serviceRequest") or body.get("request") or ""
     service_name = body["serviceName"]
     selected_artifacts = body.get("selectedArtifacts", [])
 
@@ -152,15 +144,18 @@ def _process_record(record: dict):
         )
         return
 
-    # Step 8: Create ZIP and upload to S3
+    # Step 8: Validate, then repair mandatory failures once before zipping
+    update_request_status(request_id, "GENERATING", step="Running governance validation")
+    validation_results = validate_generated_output(files, spec)
+    files, validation_results = _repair_mandatory_failures(
+        files, spec, validation_results, system_prompt, service_request, request_id
+    )
+
+    # Step 9: Create ZIP and upload to S3
     zip_bytes = create_zip(files, resolved_name)
     s3_key = f"generated/{request_id}/{resolved_name}.zip"
     upload_zip(s3_key, zip_bytes)
     logger.info(f"ZIP uploaded to s3://{ARTIFACTS_BUCKET}/{s3_key}")
-
-    # Step 9: Run governance validation
-    update_request_status(request_id, "GENERATING", step="Running governance validation")
-    validation_results = validate_generated_output(files, spec)
     save_validation_results(request_id, validation_results)
 
     # Step 10: Calculate Cryptographic Lineage & update status to COMPLETED
@@ -209,6 +204,47 @@ def _process_record(record: dict):
     )
 
 
+def _mandatory_failures(results: list[dict]) -> list[dict]:
+    return [
+        item for item in results
+        if item.get("status") == "FAIL" and item.get("severity") == "mandatory"
+    ]
+
+
+def _repair_mandatory_failures(
+    files: dict,
+    spec: dict,
+    validation_results: list,
+    system_prompt: str,
+    service_request: str,
+    request_id: str,
+) -> tuple[dict, list]:
+    """One LLM rewrite pass when generated files fail mandatory checks."""
+    failures = _mandatory_failures(validation_results)
+    if not failures:
+        return files, validation_results
+
+    logger.info(f"Attempting repair for {len(failures)} mandatory validation failures")
+    update_request_status(request_id, "GENERATING", step="Repairing generated code")
+    repair_prompt = build_repair_prompt(files, failures, service_request)
+
+    try:
+        Guardrails.check_token_budget(repair_prompt)
+        safe_repair = Guardrails.sanitize_and_isolate(repair_prompt)
+        repair_result = llm_client.generate_code(system_prompt, safe_repair)
+        repaired_files = parse_llm_output(repair_result["content"])
+        merged = {**files, **repaired_files}
+        revalidated = validate_generated_output(merged, spec)
+        remaining = _mandatory_failures(revalidated)
+        logger.info(
+            f"Repair pass complete: {len(failures)} -> {len(remaining)} mandatory failures"
+        )
+        return merged, revalidated
+    except Exception as err:
+        logger.warning(f"Repair pass skipped: {err}")
+        return files, validation_results
+
+
 def _extract_service_name(service_request: str) -> str:
     """Extract a clean kebab-case service name from the developer's request.
 
@@ -234,5 +270,9 @@ def _extract_service_name(service_request: str) -> str:
     text = re.sub(r"\s+", "-", text)
     text = re.sub(r"-+", "-", text)
     text = text.strip("-")
+
+    # Prevent MAX_PATH issues in Windows by truncating absurdly long names
+    if len(text) > 40:
+        text = text[:40].strip("-")
 
     return text or "service"

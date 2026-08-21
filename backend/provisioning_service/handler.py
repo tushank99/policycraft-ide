@@ -17,10 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from shared.logger import get_logger
 from shared.db import get_request
 
-try:
-    from github_client import provision_to_github
-except ImportError:
-    from backend.provisioning_service.github_client import provision_to_github
+from github_client import provision_to_github
 
 logger = get_logger("provisioning-service")
 s3_client: Any = boto3.client("s3")
