@@ -3,7 +3,7 @@
 # with the Lambda Runtime Interface Emulator:
 #   docker build -f backend/Dockerfile -t policycraft-orchestrator .
 #   docker run -p 9000:8080 -e GROQ_API_KEY=... policycraft-orchestrator
-FROM public.ecr.aws/lambda/python:3.12
+FROM public.ecr.aws/lambda/python:3.15
 
 # Pull the latest Amazon Linux security patches. The base image lags behind
 # the AL2023 repos (e.g. rpm/sqlite-libs fixes), which Trivy flags as HIGH.
