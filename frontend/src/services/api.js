@@ -4,6 +4,7 @@
  */
 
 import axios from 'axios';
+import { authEnabled, getAccessToken, login } from './auth';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -14,6 +15,22 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Attach the Cognito access token; send the user to login on 401.
+if (api.interceptors) {
+  api.interceptors.request.use((config) => {
+    const token = getAccessToken();
+    if (token) config.headers = { ...config.headers, Authorization: `Bearer ${token}` };
+    return config;
+  });
+  api.interceptors.response.use(
+    (res) => res,
+    (err) => {
+      if (authEnabled && err?.response?.status === 401) login();
+      return Promise.reject(err);
+    },
+  );
+}
 
 // ─── Policy endpoints ─────────────────────────────────────
 

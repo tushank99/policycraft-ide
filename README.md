@@ -60,13 +60,19 @@ Utilizes DynamoDB Streams and AWS EventBridge to asynchronously record immutable
 ### 5. Automated GitOps Repository Provisioning (Zero-Download Scaffolding)
 Features a standalone provisioning service integrating with the GitHub REST API. Automatically provisions repositories to the organization with branch protection rules, baseline GitHub Actions CI/CD workflows, and initial pull requests, reducing microservice bootstrap time.
 
+### 6. Security & AI-for-Cyber (P1–P5)
+Least-privilege IAM per Lambda (no wildcards), Checkov + Access Analyzer in CI, Cognito-protected API, SSE-KMS everywhere, SAST/SCA/secret scanning with SARIF, CloudTrail alarms, a DistilBERT CVE-severity model, and a LangGraph multi-agent triage bot with human approval. Results and runbook: [docs/security/README.md](docs/security/README.md).
+
 ## Monorepo Structure
 
 ```text
 ├── frontend/    # React SPA (Vite)
 ├── backend/     # Python Lambda functions
 ├── infra/       # Terraform IaC
-└── .github/     # CI/CD workflows
+├── ml/          # CVE severity models (P4)
+├── agents/      # LangGraph triage agents (P5)
+├── scripts/     # IAM validation, alarm trigger
+└── .github/     # CI/CD + security workflows
 ```
 
 ## AWS Services Utilized
@@ -105,14 +111,20 @@ terraform init
 terraform apply -var="groq_api_key=$GROQ_API_KEY" -var="github_token=$GITHUB_TOKEN"
 ```
 
+Secrets are stored in SSM Parameter Store (SecureString), not in Lambda environment variables. Create a login user with `aws cognito-idp admin-create-user` (see docs/security/README.md).
+
 ### Frontend Deployment
 Build and deploy the React application to the provisioned S3 bucket:
 
 ```bash
 cd frontend
 npm ci
-VITE_API_URL=$(cd ../infra && terraform output -raw api_url) npm run build
+export VITE_API_URL=$(cd ../infra && terraform output -raw api_url)
+export VITE_COGNITO_DOMAIN=$(cd ../infra && terraform output -raw cognito_domain)
+export VITE_COGNITO_CLIENT_ID=$(cd ../infra && terraform output -raw cognito_client_id)
+npm run build
 aws s3 sync dist/ s3://$(cd ../infra && terraform output -raw frontend_bucket) --delete
+aws cloudfront create-invalidation --distribution-id $(cd ../infra && terraform output -raw cloudfront_distribution_id) --paths "/*"
 ```
 
 Outputs for the CloudFront distribution and API Gateway endpoint are available via Terraform state.

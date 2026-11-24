@@ -1,0 +1,50 @@
+# Checkov config for infra/.
+#
+# Open-source Checkov only reports severities when a Prisma Cloud API key is
+# configured, so "fail the build on HIGH" is implemented as an explicit
+# hard-fail list of HIGH-impact checks (IAM wildcards / privilege escalation,
+# public S3, missing encryption, unauthenticated API routes, plaintext secrets).
+# Everything else is reported (soft-fail) and visible in code scanning.
+#
+# Accepted risks are skipped INLINE in the .tf files with `#checkov:skip=<ID>:<reason>`
+# so each exception sits next to the resource and is reviewed in the PR.
+directory:
+  - infra
+framework:
+  - terraform
+quiet: false
+compact: true
+soft-fail: true
+hard-fail-on:
+  # IAM
+  - CKV_AWS_1    # IAM policy grants full "*:*" admin
+  - CKV_AWS_49   # IAM policy document allows "*" admin
+  - CKV_AWS_62   # IAM role policy allows "*:*"
+  - CKV_AWS_63   # IAM policy uses "*" actions
+  - CKV_AWS_274  # AdministratorAccess attached
+  - CKV_AWS_286  # privilege escalation
+  - CKV_AWS_287  # credentials exposure
+  - CKV_AWS_288  # data exfiltration
+  - CKV_AWS_289  # permissions management without constraints
+  - CKV_AWS_290  # write access without constraints
+  - CKV_AWS_355  # "*" resource for restrictable actions
+  - CKV_AWS_60   # role assumable by any principal
+  - CKV_AWS_61   # role assumable across accounts without restriction
+  # S3 public access / encryption
+  - CKV_AWS_19   # S3 SSE
+  - CKV_AWS_20   # public READ ACL
+  - CKV_AWS_57   # public WRITE ACL
+  - CKV_AWS_53   # block_public_acls
+  - CKV_AWS_54   # block_public_policy
+  - CKV_AWS_55   # ignore_public_acls
+  - CKV_AWS_56   # restrict_public_buckets
+  - CKV_AWS_70   # bucket policy allows any principal
+  - CKV2_AWS_6   # bucket has a public access block
+  # Data at rest / secrets
+  - CKV_AWS_27   # SQS encryption
+  - CKV_AWS_45   # secrets in Lambda environment variables
+  - CKV_AWS_41   # hard-coded AWS credentials in provider
+  # API
+  - CKV_AWS_309  # API Gateway route without authorization
+# Output flags are passed on the command line in .github/workflows/security.yml
+# (the "console,<dir>" form of output-file-path only works as a CLI flag).

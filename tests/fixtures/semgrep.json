@@ -1,0 +1,1 @@
+{"errors": [], "results": [{"check_id": "python.lang.security.audit.subprocess-shell-true", "path": "backend/x.py", "start": {"line": 10}, "extra": {"message": "subprocess call with shell=True allows command injection", "severity": "ERROR", "metadata": {"cwe": ["CWE-78"]}}}]}

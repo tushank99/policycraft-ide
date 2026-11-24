@@ -1,0 +1,39 @@
+# Project-specific Semgrep rules (run alongside the public registry packs).
+rules:
+  - id: policycraft-secret-in-log
+    languages: [python]
+    severity: ERROR
+    message: Possible secret written to logs. Never log tokens/keys; log a redacted marker instead.
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.$M(..., <... $SECRET ...>, ...)
+          - pattern: print(..., <... $SECRET ...>, ...)
+      - metavariable-regex:
+          metavariable: $SECRET
+          regex: (?i)^(groq_api_key|github_token|api_key|token|secret|password)$
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(debug|info|warning|error|exception|critical)$
+  - id: policycraft-requests-without-timeout
+    languages: [python]
+    severity: WARNING
+    message: Network call without a timeout can hang the Lambda until it is killed.
+    pattern-either:
+      - patterns:
+          - pattern: urllib.request.urlopen(...)
+          - pattern-not: urllib.request.urlopen(..., timeout=$T, ...)
+      - patterns:
+          - pattern: requests.$M(...)
+          - pattern-not: requests.$M(..., timeout=$T, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(get|post|put|patch|delete|head|request)$
+  - id: policycraft-presigned-url-long-expiry
+    languages: [python]
+    severity: WARNING
+    message: Pre-signed URLs should expire within 1 hour.
+    patterns:
+      - pattern: $C.generate_presigned_url(..., ExpiresIn=$N, ...)
+      - metavariable-comparison:
+          metavariable: $N
+          comparison: $N > 3600

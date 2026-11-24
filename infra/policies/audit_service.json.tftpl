@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SealManifestsIntoVault",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "${vault_bucket_arn}/manifests/*"
+    },
+    {
+      "Sid": "HeadObjectReturns404NotDenied",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "${vault_bucket_arn}",
+      "Condition": {"StringLike": {"s3:prefix": ["manifests/*"]}}
+    },
+    {
+      "Sid": "WriteOwnLogGroupOnly",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "${log_group_arn}:log-stream:*"
+    }
+  ]
+}

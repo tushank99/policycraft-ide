@@ -202,7 +202,7 @@ export default function GenerationStatus() {
             <div>
               <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Generation failed</div>
               <div style={{ fontSize: 'var(--text-xs)', marginTop: 2, opacity: 0.8 }}>
-                {details?.errorMessage || 'An unexpected error occurred. Please try creating a new request.'}
+                {details?.error || details?.errorMessage || 'An unexpected error occurred. Please try creating a new request.'}
               </div>
             </div>
           </div>

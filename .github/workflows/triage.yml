@@ -1,0 +1,116 @@
+name: Security Triage Agents
+
+# P5: LangGraph supervisor (triage -> remediation -> human approval -> report).
+#  * pull_request: scan, rank with the P4 severity model, propose fixes, post ONE
+#    PR comment (updated in place). Never changes code.
+#  * "/approve-fixes <id> ..." comment by a maintainer = the human approval.
+#    Applies only those dependency bumps and pushes a commit to the PR branch.
+
+on:
+  pull_request:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install agents
+        run: pip install -r agents/requirements.txt "pip-audit==2.7.*"
+      - name: Scan (JSON for the agents)
+        run: |
+          mkdir -p scans
+          docker run --rm -v "$PWD:/src" aquasec/trivy:0.57.1 fs --scanners vuln --format json -o /src/scans/trivy.json /src || true
+          docker run --rm -v "$PWD:/src" semgrep/semgrep:1.95.0 semgrep scan --config p/python --config p/javascript \
+            --config /src/.semgrep.yml --metrics off --json -o /src/scans/semgrep.json /src || true
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.21.2 dir /repo --config /repo/.gitleaks.toml \
+            --report-format sarif --report-path /repo/scans/gitleaks.sarif --redact --exit-code 0 || true
+          for f in $(git ls-files '*requirements*.txt'); do
+            pip-audit -r "$f" --format json -o "scans/pip-audit-$(echo $f | tr '/' '_').json" || true
+          done
+          ls -la scans
+      - name: Fetch severity model (optional)
+        if: vars.SEVERITY_MODEL_URL != ''
+        # Only point this at a release asset of THIS repo: joblib files are pickles.
+        run: mkdir -p ml/models && curl -fsSL "${{ vars.SEVERITY_MODEL_URL }}" -o ml/models/baseline_tfidf_lr.joblib
+      - name: Run agents (propose mode)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          REMEDIATION_LLM: ${{ secrets.GROQ_API_KEY != '' && 'groq' || 'offline' }}
+        run: python -m agents.run scans/*.json scans/*.sarif --mode propose
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: triage
+          path: |
+            triage-out/
+            scans/
+
+  apply-approved:
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/approve-fixes') &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Resolve PR (same-repo only)
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          data=$(gh api repos/${{ github.repository }}/pulls/${{ github.event.issue.number }})
+          if [ "$(echo "$data" | jq -r .head.repo.full_name)" != "${{ github.repository }}" ]; then
+            echo "Refusing to push to a fork PR"; exit 1
+          fi
+          echo "ref=$(echo "$data" | jq -r .head.ref)" >> "$GITHUB_OUTPUT"
+      # Trusted agent code from the default branch; the PR is only data.
+      - uses: actions/checkout@v4
+        with:
+          path: trusted
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          path: pr
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r trusted/agents/requirements.txt
+      - name: Scan PR checkout
+        run: |
+          mkdir -p scans
+          docker run --rm -v "$PWD/pr:/src" -v "$PWD/scans:/out" aquasec/trivy:0.57.1 fs --scanners vuln --format json -o /out/trivy.json /src
+      - name: Apply ONLY the approved ids
+        env:
+          COMMENT: ${{ github.event.comment.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REMEDIATION_LLM: offline
+        working-directory: trusted
+        run: |
+          IDS=$(printf '%s' "$COMMENT" | head -1 | sed 's#^/approve-fixes##' | tr -cd 'a-f0-9 \n')
+          python -m agents.run ../scans/trivy.json --mode preapproved --approve $IDS --repo-root ../pr
+      - name: Commit fixes to the PR branch
+        working-directory: pr
+        run: |
+          if git diff --quiet; then echo "Nothing to commit"; exit 0; fi
+          git config user.name "policycraft-triage-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "fix(deps): apply human-approved security bumps (${{ github.event.comment.user.login }})"
+          git push

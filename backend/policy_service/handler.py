@@ -16,7 +16,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from shared.logger import get_logger
-from shared.response import success, bad_request, not_found, server_error, cors_preflight
+from shared.response import success, bad_request, not_found, server_error, cors_preflight, forbidden
+from shared.auth import is_admin, caller_id
 from shared.db import get_policy_profile, save_policy_profile
 from defaults import DEFAULT_POLICY_PROFILE
 
@@ -46,6 +47,9 @@ def handler(event, context):
 
         # PUT /policies — update profile
         if http_method == "PUT":
+            if not is_admin(event):
+                logger.warning(f"Denied policy update for non-admin caller {caller_id(event)}")
+                return forbidden("Only members of the 'admins' group can change the policy profile")
             return _update_profile(event)
 
         return not_found(f"Unknown route: {http_method} {path}")

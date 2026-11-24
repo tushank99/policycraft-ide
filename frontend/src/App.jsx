@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { authEnabled, getAccessToken, handleCallback, isAdmin, login } from './services/auth';
 import { Shield, AlertCircle } from 'lucide-react';
 import Layout from './components/Layout';
 import AdminOverview from './pages/AdminOverview';
@@ -11,8 +12,6 @@ import GenerationPlanPage from './pages/GenerationPlanPage';
 import GenerationStatus from './pages/GenerationStatus';
 import ResultsDashboard from './pages/ResultsDashboard';
 import './index.css';
-
-const ADMIN_PASSWORD = 'admin123';
 
 function PlaceholderPage({ title, subtitle }) {
   return (
@@ -26,21 +25,7 @@ function PlaceholderPage({ title, subtitle }) {
   );
 }
 
-function AdminPasswordModal({ onSuccess, onCancel }) {
-  const [pwd, setPwd] = useState('');
-  const [error, setError] = useState(false);
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    if (pwd === ADMIN_PASSWORD) {
-      setError(false);
-      onSuccess();
-    } else {
-      setError(true);
-      setPwd('');
-    }
-  }
-
+function AdminDeniedModal({ onClose }) {
   return (
     <div className="modal-overlay">
       <div className="modal-card">
@@ -48,71 +33,86 @@ function AdminPasswordModal({ onSuccess, onCancel }) {
           <Shield size={22} />
         </div>
         <div className="modal-title">Admin Access</div>
-        <div className="modal-subtitle">Enter the admin password to continue.</div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">Password</label>
-            <input
-              className="form-input"
-              type="password"
-              placeholder="Enter admin password"
-              value={pwd}
-              onChange={(e) => { setPwd(e.target.value); setError(false); }}
-              autoFocus
-            />
-            {error && (
-              <div className="modal-error">
-                <AlertCircle size={12} />
-                Incorrect password — please try again.
-              </div>
-            )}
-          </div>
-
-          <div className="modal-actions">
-            <button type="button" className="btn btn-secondary" style={{ flex: 1 }} onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={!pwd}>
-              Continue
-            </button>
-          </div>
-        </form>
+        <div className="modal-subtitle">
+          Your account is not in the <code>admins</code> group. Ask a platform admin to add you
+          (aws cognito-idp admin-add-user-to-group).
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-primary" style={{ flex: 1 }} onClick={onClose}>
+            OK
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
+function AuthCallback() {
+  const navigate = useNavigate();
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    handleCallback()
+      .then((to) => navigate(to, { replace: true }))
+      .catch((e) => setError(e.message));
+  }, [navigate]);
+  return (
+    <div className="page-body" style={{ textAlign: 'center', paddingTop: 80 }}>
+      {error ? (
+        <div style={{ color: 'var(--error)' }}>
+          <AlertCircle size={20} /> {error}{' '}
+          <button className="btn btn-secondary" onClick={() => login('/')}>Try again</button>
+        </div>
+      ) : 'Signing you in…'}
+    </div>
+  );
+}
+
+function RequireLogin({ children }) {
+  const location = useLocation();
+  const needsLogin = authEnabled && !getAccessToken() && location.pathname !== '/auth/callback';
+  useEffect(() => {
+    if (needsLogin) login(location.pathname);
+  }, [needsLogin, location.pathname]);
+  if (needsLogin) return <div className="page-body" style={{ textAlign: 'center', paddingTop: 80 }}>Redirecting to sign in…</div>;
+  return children;
+}
+
 export default function App() {
-  const [role, setRole] = useState(() => localStorage.getItem('idp-role') || 'developer');
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  // The UI role is only a view toggle; the API enforces admin rights (Cognito "admins" group).
+  const [role, setRole] = useState(() => {
+    let saved = 'developer';
+    try { saved = localStorage.getItem('idp-role') || 'developer'; } catch { /* storage blocked */ }
+    return saved === 'admin' && !isAdmin() ? 'developer' : saved;
+  });
+  const [showDenied, setShowDenied] = useState(false);
+
+  function persistRole(newRole) {
+    setRole(newRole);
+    try { localStorage.setItem('idp-role', newRole); } catch { /* storage blocked */ }
+  }
 
   function handleAdminClick() {
     if (role === 'admin') return;
-    setShowPasswordModal(true);
-  }
-
-  function handleAdminSuccess() {
-    setShowPasswordModal(false);
-    setRole('admin');
-    localStorage.setItem('idp-role', 'admin');
-  }
-
-  function handleAdminCancel() {
-    setShowPasswordModal(false);
+    if (isAdmin()) persistRole('admin');
+    else setShowDenied(true);
   }
 
   function handleRoleChange(newRole) {
-    setRole(newRole);
-    localStorage.setItem('idp-role', newRole);
+    if (newRole === 'admin' && !isAdmin()) {
+      setShowDenied(true);
+      return;
+    }
+    persistRole(newRole);
   }
 
   return (
     <BrowserRouter>
-      {showPasswordModal && (
-        <AdminPasswordModal onSuccess={handleAdminSuccess} onCancel={handleAdminCancel} />
-      )}
+      {showDenied && <AdminDeniedModal onClose={() => setShowDenied(false)} />}
 
+      <Routes>
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="*" element={
+      <RequireLogin>
       <Layout role={role} onRoleChange={handleRoleChange} onAdminClick={handleAdminClick}>
         <Routes>
           <Route path="/" element={<Navigate to={role === 'admin' ? '/admin' : '/developer/requests'} replace />} />
@@ -135,6 +135,9 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
+      </RequireLogin>
+        } />
+      </Routes>
     </BrowserRouter>
   );
 }

@@ -1,0 +1,16 @@
+title = "PolicyCraft gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "AWS documentation example keys and fake tokens used in guardrail tests"
+regexes = [
+  '''AKIAIOSFODNN7EXAMPLE''',
+  '''ghp_1234567890abcdefghijklmnopqrstuvwxyz''',
+]
+paths = [
+  '''frontend/package-lock\.json''',
+  '''(^|/)node_modules/''',
+  '''(^|/)venv/''',
+]

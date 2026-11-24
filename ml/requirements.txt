@@ -1,0 +1,11 @@
+# Baseline + inference fallback (CPU, small)
+scikit-learn>=1.5,<2
+pandas>=2.2,<3
+joblib>=1.4
+requests>=2.32,<3
+# DistilBERT fine-tuning (Colab GPU) / optional inference
+transformers>=5.10,<6
+datasets>=5.0.1,<6
+accelerate>=1.0
+fsspec>=2026.6.0  # CVE-2026-104851
+torch>=2.3

@@ -1,0 +1,4 @@
+# Accepted pip-audit findings: <vuln-id>  # reason, owner, review-by date
+PYSEC-2025-217   # CVE-2025-14929 transformers: no fixed release. ml/ training deps only (Colab), never deployed to Lambda. Review 2027-02-24.
+PYSEC-2026-2290  # CVE-2026-5241 transformers: no fixed release. Same scope as above. Review 2027-02-24.
+PYSEC-2026-4174  # CVE-2026-80047 transformers: no fixed release. Same scope as above. Review 2027-02-24.

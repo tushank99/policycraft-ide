@@ -200,7 +200,7 @@ def _api_request(
     req = urllib.request.Request(url, data=encoded_data, headers=headers or {}, method=method)
     
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=30) as response:
             if response.status == 204:
                 return {}
             return json.loads(response.read().decode("utf-8"))

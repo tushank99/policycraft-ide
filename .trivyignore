@@ -1,0 +1,2 @@
+# Accepted Trivy findings. One CVE id per line, with a reason and review date.
+# Keep this list empty unless a finding has no fix and is not exploitable here.

@@ -23,7 +23,8 @@ logger = get_logger("provisioning-service")
 s3_client: Any = boto3.client("s3")
 
 ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+from shared.secrets import get_secret
+GITHUB_TOKEN = get_secret("GITHUB_TOKEN")
 
 
 def _respond(status_code: int, body: Dict[str, Any]) -> Dict[str, Any]:

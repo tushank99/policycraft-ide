@@ -1,0 +1,9 @@
+**/node_modules
+**/venv
+**/.venv
+**/__pycache__
+.git
+infra/.terraform
+infra/builds
+ml/data
+ml/models
