@@ -53,7 +53,7 @@ jobs:
         with:
           sarif_file: checkov-results/results_sarif.sarif
           category: checkov
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: checkov-sarif
@@ -99,7 +99,7 @@ jobs:
       - name: IAM Access Analyzer validate-policy
         if: vars.AWS_SECURITY_ROLE_ARN != ''
         run: python scripts/validate_iam_policies.py --access-analyzer --json iam-report.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always() && vars.AWS_SECURITY_ROLE_ARN != ''
         with:
           name: iam-report
@@ -142,7 +142,7 @@ jobs:
           print(f"{len(res)} findings, {len(errs)} ERROR")
           sys.exit(1 if errs else 0)
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: semgrep
@@ -206,7 +206,7 @@ jobs:
           ignore-unfixed: true
           exit-code: "1"
           trivyignores: .trivyignore
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: trivy
@@ -232,7 +232,7 @@ jobs:
             echo "::endgroup::"
           done
           exit $status
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pip-audit
@@ -250,7 +250,7 @@ jobs:
         run: |
           npm audit --omit=dev --json > npm-audit.json || true
           npm audit --omit=dev --audit-level=high
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit
