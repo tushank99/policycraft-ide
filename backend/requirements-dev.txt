@@ -1,4 +1,4 @@
-pytest==9.0.3
+pytest==9.2.0
 pytest-cov==6.0.0
-pytest-mock==3.14.0
-boto3==1.36.0
+pytest-mock==3.17.0
+boto3==1.44.9
