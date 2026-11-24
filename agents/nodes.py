@@ -53,7 +53,9 @@ def _log(state: TriageState, msg: str) -> list[str]:
 def supervisor(state: TriageState) -> dict:
     """Goal: every finding triaged, every actionable one has a fix proposal,
     no fix applied without approval, and a report delivered."""
-    if "findings" not in state:
+    if "report_markdown" in state:
+        nxt = "end"  # report delivered: always terminal
+    elif "findings" not in state:
         nxt = "triage"
     elif "remediations" not in state:
         nxt = "remediation"
