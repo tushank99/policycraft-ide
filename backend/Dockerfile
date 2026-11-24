@@ -5,6 +5,10 @@
 #   docker run -p 9000:8080 -e GROQ_API_KEY=... policycraft-orchestrator
 FROM public.ecr.aws/lambda/python:3.12
 
+# Pull the latest Amazon Linux security patches. The base image lags behind
+# the AL2023 repos (e.g. rpm/sqlite-libs fixes), which Trivy flags as HIGH.
+RUN dnf -y upgrade --refresh && dnf clean all && rm -rf /var/cache/dnf
+
 COPY backend/generation_orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
