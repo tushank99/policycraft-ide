@@ -7,7 +7,9 @@ FROM public.ecr.aws/lambda/python:3.12
 
 # Pull the latest Amazon Linux security patches. The base image lags behind
 # the AL2023 repos (e.g. rpm/sqlite-libs fixes), which Trivy flags as HIGH.
-RUN dnf -y upgrade --refresh && dnf clean all && rm -rf /var/cache/dnf
+# AL2023 pins dnf to the image's release version, so a plain upgrade is a
+# no-op; --releasever=latest moves to the newest repo where the fixes live.
+RUN dnf -y upgrade --refresh --releasever=latest && dnf clean all && rm -rf /var/cache/dnf
 
 COPY backend/generation_orchestrator/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
