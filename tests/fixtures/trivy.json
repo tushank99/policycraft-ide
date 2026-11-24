@@ -1,0 +1,4 @@
+{"SchemaVersion": 2, "ArtifactType": "filesystem", "Results": [{"Target": "backend/requirements-dev.txt", "Class": "lang-pkgs", "Vulnerabilities": [
+ {"VulnerabilityID": "CVE-2024-0001", "PkgName": "urllib3", "InstalledVersion": "1.26.0", "FixedVersion": "1.26.19, 2.2.2", "Severity": "MEDIUM", "Title": "urllib3: proxy-authorization header not stripped", "Description": "Information disclosure of the Proxy-Authorization header during cross-origin redirects."},
+ {"VulnerabilityID": "CVE-2024-0002", "PkgName": "jinja2", "InstalledVersion": "3.1.2", "FixedVersion": "3.1.4", "Severity": "HIGH", "Title": "jinja2: sandbox escape", "Description": "A sandbox escape allows remote code execution through crafted templates."}
+]}]}

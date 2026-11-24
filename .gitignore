@@ -40,3 +40,8 @@ Thumbs.db
 
 # Lambda packages
 backend/*/package/
+checkov-results/
+triage-out/
+scans/
+
+policycraft_interview_notes.txt

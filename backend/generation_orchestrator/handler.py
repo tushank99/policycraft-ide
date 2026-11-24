@@ -50,20 +50,106 @@ ARTIFACTS_BUCKET = os.environ.get("ARTIFACTS_BUCKET", "idp-artifacts")
 llm_client = LLMClient()
 
 
+_SOURCE_EXTENSIONS = {
+    "python": (".py",),
+    "typescript": (".ts", ".js"),
+    "javascript": (".js", ".ts"),
+    "node": (".js", ".ts"),
+    "nodejs": (".js", ".ts"),
+    "go": (".go",),
+}
+
+
 def handler(event, context):
-    """Lambda entry point — processes SQS messages for code generation."""
+    """Lambda entry point — processes SQS messages for code generation.
+
+    Any unexpected error marks the request FAILED (with the reason) instead of
+    re-raising: a re-raise makes SQS redeliver the message and burn more LLM
+    quota while the UI sits on "GENERATING" forever.
+    """
     for record in event.get("Records", []):
+        request_id = None
         try:
+            request_id = json.loads(record.get("body") or "{}").get("requestId")
             _process_record(record)
         except Exception as e:
             logger.exception(f"Failed to process SQS record: {e}")
-            raise
+            if request_id:
+                try:
+                    update_request_status(
+                        request_id, "FAILED", step="Generation crashed", error=str(e)[:1000]
+                    )
+                except Exception:
+                    logger.exception("Could not mark request FAILED")
+
+
+def _check_completeness(files: dict, spec: dict) -> list[str]:
+    """Return problems that mean the generated project is not usable.
+
+    Guards against "COMPLETED" runs whose ZIP only holds requirements.txt.
+    """
+    problems = []
+    language = str(spec.get("stack", {}).get("language", "python")).lower()
+    selected = spec.get("selectedArtifacts") or spec.get("artifacts") or []
+    exts = _SOURCE_EXTENSIONS.get(language, (".py", ".ts", ".js", ".go"))
+
+    if ("source" in selected or "api-skeleton" in selected) and not any(
+        path.lower().endswith(exts) for path in files
+    ):
+        problems.append(f"no {language} source files were generated")
+    if "readme" in selected and not any(p.lower().endswith("readme.md") for p in files):
+        problems.append("README.md missing")
+    if "dockerfile" in selected and not any(p.split("/")[-1].lower() == "dockerfile" for p in files):
+        problems.append("Dockerfile missing")
+    if len(files) < 2:
+        problems.append(f"only {len(files)} file(s) generated")
+    return problems
+
+
+def _generate_files(system_prompt: str, user_prompt: str, spec: dict, request_id: str):
+    """Call the LLM and parse files, retrying once if output is incomplete."""
+    last_problems: list[str] = []
+    best = None
+    for attempt in (1, 2):
+        prompt = user_prompt
+        if attempt == 2:
+            update_request_status(request_id, "GENERATING", step="Regenerating (incomplete output)")
+            prompt = (
+                user_prompt
+                + "\n\nYour previous answer was incomplete ("
+                + "; ".join(last_problems)
+                + "). Be concise: no explanations, output every file now."
+            )
+        try:
+            result = llm_client.generate_code(system_prompt, prompt)
+            files = parse_llm_output(result["content"])
+        except ValueError as e:  # parser found nothing usable
+            last_problems = [str(e)]
+            continue
+        problems = _check_completeness(files, spec)
+        if result.get("finish_reason") == "length":
+            problems.append("model output was cut off at max_tokens")
+        if best is None or len(files) > len(best[1]):
+            best = (result, files)
+        if not problems:
+            return result, files
+        last_problems = problems
+        logger.warning(f"Attempt {attempt} incomplete: {problems}")
+
+    if best and not _check_completeness(best[1], spec):
+        return best
+    raise ValueError("Generated project is incomplete: " + "; ".join(last_problems))
 
 
 def _process_record(record: dict):
     """Process a single SQS generation request."""
     body = json.loads(record["body"])
     request_id = body["requestId"]
+
+    existing = get_request(request_id)
+    if existing and existing.get("status") in ("COMPLETED", "FAILED"):
+        logger.info(f"Skipping duplicate delivery for {request_id} ({existing.get('status')})")
+        return
     service_request = body.get("serviceRequest") or body.get("request") or ""
     service_name = body["serviceName"]
     selected_artifacts = body.get("selectedArtifacts", [])
@@ -116,33 +202,20 @@ def _process_record(record: dict):
         )
         return
 
-    # Step 6: Call LLM Router (Groq primary, Bedrock fallback)
+    # Step 6-7: Call LLM router (Groq primary) and parse files, with a
+    # completeness check so a truncated answer never ships as "COMPLETED".
     try:
-        generation_result = llm_client.generate_code(system_prompt, safe_user_prompt)
-        raw_output = generation_result["content"]
-    except RuntimeError as e:
-        logger.error(f"LLM API call failed: {e}")
+        generation_result, files = _generate_files(system_prompt, safe_user_prompt, spec, request_id)
+    except (RuntimeError, ValueError) as e:
+        logger.error(f"Generation failed: {e}")
         update_request_status(
             request_id,
             "FAILED",
-            step="LLM API call failed",
-            error=str(e),
+            step="LLM generation failed",
+            error=str(e)[:1000],
         )
         return
-
-    # Step 7: Parse output into files
     update_request_status(request_id, "GENERATING", step="Assembling artifacts")
-    try:
-        files = parse_llm_output(raw_output)
-    except ValueError as e:
-        logger.error(f"Failed to parse LLM output: {e}")
-        update_request_status(
-            request_id,
-            "FAILED",
-            step="Failed to parse generated code",
-            error=str(e),
-        )
-        return
 
     # Step 8: Validate, then repair mandatory failures once before zipping
     update_request_status(request_id, "GENERATING", step="Running governance validation")

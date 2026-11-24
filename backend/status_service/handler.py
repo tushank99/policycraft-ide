@@ -331,11 +331,11 @@ def _build_artifact_options(spec: dict) -> list[dict]:
 def _extract_service_name(service_request: str) -> str:
     """Extract a clean kebab-case service name from the developer's request."""
     text = service_request.strip()
-    for prefix in ["create", "build", "generate", "make", "new"]:
+    for prefix in ["create ", "build ", "generate ", "make ", "new "]:
         if text.lower().startswith(prefix):
             text = text[len(prefix):].strip()
 
-    for suffix in ["microservice", "service", "api", "application", "app", "project"]:
+    for suffix in [" microservice", " service", " api", " application", " app", " project"]:
         if text.lower().endswith(suffix):
             text = text[:len(text) - len(suffix)].strip()
 

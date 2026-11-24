@@ -1,0 +1,41 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "RequestStateReadWrite",
+      "Effect": "Allow",
+      "Action": ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Resource": "${table_arn}"
+    },
+    {
+      "Sid": "ConsumeGenerationQueue",
+      "Effect": "Allow",
+      "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"],
+      "Resource": "${queue_arn}"
+    },
+    {
+      "Sid": "WriteGeneratedArtifacts",
+      "Effect": "Allow",
+      "Action": ["s3:PutObject"],
+      "Resource": "${artifacts_bucket_arn}/generated/*"
+    },
+    {
+      "Sid": "ReadGroqApiKey",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter"],
+      "Resource": "${groq_param_arn}"
+    },
+    {
+      "Sid": "OptionalBedrockFallbackSingleModel",
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel"],
+      "Resource": "${bedrock_model_arn}"
+    },
+    {
+      "Sid": "WriteOwnLogGroupOnly",
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "${log_group_arn}:log-stream:*"
+    }
+  ]
+}

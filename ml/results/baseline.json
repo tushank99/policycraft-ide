@@ -1,0 +1,47 @@
+{
+  "model": "tfidf(1-2gram)+logreg(balanced)",
+  "macro_f1": 0.7034,
+  "per_class_f1": {
+    "LOW": 0.7302,
+    "MEDIUM": 0.6978,
+    "HIGH": 0.6323,
+    "CRITICAL": 0.7532
+  },
+  "confusion_matrix": {
+    "labels": [
+      "LOW",
+      "MEDIUM",
+      "HIGH",
+      "CRITICAL"
+    ],
+    "matrix": [
+      [
+        115,
+        14,
+        12,
+        9
+      ],
+      [
+        29,
+        97,
+        16,
+        8
+      ],
+      [
+        14,
+        14,
+        92,
+        30
+      ],
+      [
+        7,
+        3,
+        21,
+        119
+      ]
+    ]
+  },
+  "n_train": 5400,
+  "n_test": 600,
+  "train_seconds": 6.2
+}

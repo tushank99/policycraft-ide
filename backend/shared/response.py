@@ -36,6 +36,11 @@ def bad_request(message: str) -> dict:
     return _build_response(400, {"error": "Bad Request", "message": message})
 
 
+def forbidden(message: str = "Forbidden") -> dict:
+    """403 Forbidden response."""
+    return _build_response(403, {"error": "Forbidden", "message": message})
+
+
 def not_found(message: str = "Resource not found") -> dict:
     """404 Not Found response."""
     return _build_response(404, {"error": "Not Found", "message": message})
