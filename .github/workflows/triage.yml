@@ -22,7 +22,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -81,10 +81,10 @@ jobs:
           fi
           echo "ref=$(echo "$data" | jq -r .head.ref)" >> "$GITHUB_OUTPUT"
       # Trusted agent code from the default branch; the PR is only data.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: trusted
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.pr.outputs.ref }}
           path: pr
