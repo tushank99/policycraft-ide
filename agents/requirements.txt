@@ -1,6 +1,6 @@
 langgraph>=0.2.60,<2
 requests>=2.32,<3
 boto3>=1.34          # only for REMEDIATION_LLM=bedrock (Bedrock is NOT free tier)
-scikit-learn>=1.5,<2 # baseline severity model
+scikit-learn>=1.9.1,<2 # baseline severity model
 joblib>=1.4
 pandas>=2.2,<3
